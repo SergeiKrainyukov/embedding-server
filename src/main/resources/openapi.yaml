@@ -1,0 +1,388 @@
+openapi: 3.0.3
+info:
+  title: Embedding Server API
+  description: |
+    Сервер для создания эмбеддингов текста с использованием Ollama (nomic-embed-text).
+    
+    ## Особенности:
+    - **Chunking**: Тексты разбиваются на чанки по 500-1000 токенов
+    - **Overlapping**: Перекрытие между чанками 50-100 токенов
+    - **Normalization**: Все вектора нормализуются к диапазону [-1, 1]
+    - **Storage**: Эмбеддинги сохраняются в базу данных
+  version: 1.0.0
+  contact:
+    name: Embedding Server
+    
+servers:
+  - url: http://localhost:8080
+    description: Локальный сервер
+
+tags:
+  - name: Embeddings
+    description: Создание эмбеддингов
+  - name: Search
+    description: Семантический поиск
+  - name: Storage
+    description: Управление сохранёнными эмбеддингами
+  - name: System
+    description: Системные эндпоинты
+
+paths:
+  /api/embed:
+    post:
+      tags:
+        - Embeddings
+      summary: Создать эмбеддинг для текста
+      description: |
+        Создаёт эмбеддинг для переданного текста и сохраняет его в базу данных.
+        Если текст большой, он разбивается на чанки с перекрытием.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmbedRequest'
+            examples:
+              simple:
+                summary: Простой текст
+                value:
+                  text: "Привет, мир!"
+              long:
+                summary: Длинный текст
+                value:
+                  text: "Это длинный текст, который может быть разбит на несколько чанков для более точной векторизации. Каждый чанк будет обработан отдельно, а результаты усреднены."
+      responses:
+        '200':
+          description: Эмбеддинг успешно создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmbedResponse'
+        '400':
+          description: Неверный запрос
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Ошибка сервера
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/embed/batch:
+    post:
+      tags:
+        - Embeddings
+      summary: Создать эмбеддинги для нескольких текстов
+      description: Обрабатывает несколько текстов за один запрос
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmbedBatchRequest'
+            example:
+              texts:
+                - "Первый текст для векторизации"
+                - "Второй текст для векторизации"
+                - "Третий текст"
+      responses:
+        '200':
+          description: Эмбеддинги успешно созданы
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmbedBatchResponse'
+
+  /api/embed/query:
+    post:
+      tags:
+        - Embeddings
+      summary: Создать эмбеддинг без сохранения
+      description: Создаёт эмбеддинг для текста, но НЕ сохраняет его в базу данных. Полезно для запросов поиска.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmbedRequest'
+      responses:
+        '200':
+          description: Эмбеддинг создан (без сохранения)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmbedResponse'
+
+  /api/search:
+    post:
+      tags:
+        - Search
+      summary: Семантический поиск
+      description: Ищет наиболее похожие тексты в базе данных по косинусному сходству
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchRequest'
+            example:
+              query: "машинное обучение"
+              topK: 5
+      responses:
+        '200':
+          description: Результаты поиска
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+
+  /api/embeddings:
+    get:
+      tags:
+        - Storage
+      summary: Получить все сохранённые эмбеддинги
+      description: Возвращает список всех эмбеддингов из базы данных
+      responses:
+        '200':
+          description: Список эмбеддингов
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StoredEmbedding'
+
+  /api/embeddings/{id}:
+    get:
+      tags:
+        - Storage
+      summary: Получить эмбеддинг по ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: ID эмбеддинга
+      responses:
+        '200':
+          description: Эмбеддинг найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoredEmbedding'
+        '404':
+          description: Эмбеддинг не найден
+    
+    delete:
+      tags:
+        - Storage
+      summary: Удалить эмбеддинг
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Эмбеддинг удалён
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted:
+                    type: boolean
+                  id:
+                    type: integer
+        '404':
+          description: Эмбеддинг не найден
+
+  /api/health:
+    get:
+      tags:
+        - System
+      summary: Проверка здоровья сервиса
+      description: Проверяет доступность Ollama и базы данных
+      responses:
+        '200':
+          description: Сервис работает нормально
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  ollama:
+                    type: boolean
+                  database:
+                    type: boolean
+        '503':
+          description: Сервис недоступен
+
+  /api/stats:
+    get:
+      tags:
+        - System
+      summary: Статистика сервиса
+      description: Возвращает информацию о настройках и количестве сохранённых эмбеддингов
+      responses:
+        '200':
+          description: Статистика
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  totalEmbeddings:
+                    type: integer
+                  chunkSettings:
+                    type: object
+                    properties:
+                      minTokens:
+                        type: integer
+                      maxTokens:
+                        type: integer
+                      overlapTokens:
+                        type: integer
+                  normalization:
+                    type: string
+
+components:
+  schemas:
+    EmbedRequest:
+      type: object
+      required:
+        - text
+      properties:
+        text:
+          type: string
+          description: Текст для векторизации
+          example: "Привет, мир!"
+
+    EmbedBatchRequest:
+      type: object
+      required:
+        - texts
+      properties:
+        texts:
+          type: array
+          items:
+            type: string
+          description: Список текстов для векторизации
+
+    EmbedResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          nullable: true
+          description: ID в базе данных (null если не сохранялся)
+        text:
+          type: string
+          description: Исходный текст (обрезанный)
+        embedding:
+          type: array
+          items:
+            type: number
+            format: double
+          description: Вектор эмбеддинга (нормализован к [-1, 1])
+        chunks:
+          type: array
+          nullable: true
+          items:
+            $ref: '#/components/schemas/ChunkInfo'
+          description: Информация о чанках (если текст был разбит)
+
+    ChunkInfo:
+      type: object
+      properties:
+        index:
+          type: integer
+        text:
+          type: string
+        tokenCount:
+          type: integer
+        embedding:
+          type: array
+          items:
+            type: number
+          description: Первые 10 значений эмбеддинга для превью
+
+    EmbedBatchResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmbedResponse'
+
+    SearchRequest:
+      type: object
+      required:
+        - query
+      properties:
+        query:
+          type: string
+          description: Текст запроса
+        topK:
+          type: integer
+          default: 5
+          description: Количество результатов
+
+    SearchResponse:
+      type: object
+      properties:
+        query:
+          type: string
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/SearchResult'
+
+    SearchResult:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        text:
+          type: string
+        similarity:
+          type: number
+          format: double
+          description: Косинусное сходство (0-1)
+
+    StoredEmbedding:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        text:
+          type: string
+        embedding:
+          type: array
+          items:
+            type: number
+        createdAt:
+          type: string
+          format: date-time
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        details:
+          type: string
+          nullable: true
