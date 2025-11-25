@@ -117,18 +117,69 @@ class EmbeddingService(
     /**
      * Статистика.
      */
-    fun getStats(): Map<String, Any> {
-        return mapOf(
-            "totalEmbeddings" to repository.count(),
-            "chunkSettings" to mapOf(
-                "minTokens" to 500,
-                "maxTokens" to 1000,
-                "overlapTokens" to 75
+    fun getStats(): StatsResponse {
+        return StatsResponse(
+            totalEmbeddings = repository.count(),
+            chunkSettings = ChunkSettings(
+                minTokens = 100,
+                maxTokens = 256,
+                overlapTokens = 25
             ),
-            "normalization" to "L2 to [-1, 1]"
+            normalization = "L2 to [-1, 1]"
         )
     }
     
+    /**
+     * RAG (Retrieval-Augmented Generation) - отвечает на вопрос с использованием контекста из БД или без него.
+     */
+    suspend fun answerQuestion(question: String, useRAG: Boolean = true, topK: Int = 3): RAGResponse {
+        return if (useRAG) {
+            // Ищем релевантный контекст в БД
+            val searchResult = search(question, topK)
+
+            if (searchResult.results.isEmpty()) {
+                // Если контекст не найден, отвечаем без RAG
+                val answer = ollamaClient.generateAnswer(question, null)
+                RAGResponse(
+                    question = question,
+                    answer = answer,
+                    usedRAG = false,
+                    context = null
+                )
+            } else {
+                // Формируем контекст из найденных документов
+                val contextText = searchResult.results.joinToString("\n\n") { result ->
+                    "Документ ${result.id} (сходство: ${"%.2f".format(result.similarity)}):\n${result.text}"
+                }
+
+                // Генерируем ответ с контекстом
+                val answer = ollamaClient.generateAnswer(question, contextText)
+
+                RAGResponse(
+                    question = question,
+                    answer = answer,
+                    usedRAG = true,
+                    context = searchResult.results.map { result ->
+                        RAGContext(
+                            id = result.id,
+                            text = result.text,
+                            similarity = result.similarity
+                        )
+                    }
+                )
+            }
+        } else {
+            // Без RAG - просто генерируем ответ
+            val answer = ollamaClient.generateAnswer(question, null)
+            RAGResponse(
+                question = question,
+                answer = answer,
+                usedRAG = false,
+                context = null
+            )
+        }
+    }
+
     /**
      * Проверка доступности Ollama.
      */

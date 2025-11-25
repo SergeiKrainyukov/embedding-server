@@ -2,15 +2,17 @@ package com.embedding.services
 
 /**
  * Сервис для разбиения текста на чанки с перекрытием.
- * 
+ *
  * Параметры по умолчанию:
- * - Размер чанка: 500-1000 токенов (примерно 4 символа = 1 токен)
- * - Перекрытие: 50-100 токенов между чанками
+ * - Размер чанка: 100-256 токенов (примерно 4 символа = 1 токен)
+ * - Перекрытие: 25 токенов между чанками
+ *
+ * Уменьшено до 256 токенов для совместимости с ограничениями Ollama при обработке больших текстов.
  */
 class ChunkingService(
-    private val minChunkTokens: Int = 500,
-    private val maxChunkTokens: Int = 1000,
-    private val overlapTokens: Int = 75 // среднее между 50 и 100
+    private val minChunkTokens: Int = 100,
+    private val maxChunkTokens: Int = 256,
+    private val overlapTokens: Int = 25
 ) {
     // Примерное соотношение: 1 токен ≈ 4 символа (для английского/русского текста)
     private val charsPerToken = 4

@@ -22,6 +22,8 @@ tags:
     description: Создание эмбеддингов
   - name: Search
     description: Семантический поиск
+  - name: RAG
+    description: Retrieval-Augmented Generation (генерация ответов с использованием контекста)
   - name: Storage
     description: Управление сохранёнными эмбеддингами
   - name: System
@@ -138,6 +140,56 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SearchResponse'
+
+  /api/rag:
+    post:
+      tags:
+        - RAG
+      summary: Генерация ответа с использованием RAG
+      description: |
+        Генерирует ответ на вопрос с использованием Retrieval-Augmented Generation (RAG).
+
+        - Если useRAG=true, ищет похожие документы в базе и использует их как контекст
+        - Если useRAG=false, генерирует ответ на основе знаний модели без дополнительного контекста
+
+        Используется модель qwen2.5:1.5b для генерации ответов.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RAGRequest'
+            examples:
+              withRAG:
+                summary: С использованием RAG
+                value:
+                  question: "Что такое ошибочная программа?"
+                  useRAG: true
+                  topK: 3
+              withoutRAG:
+                summary: Без использования RAG
+                value:
+                  question: "Что такое программа?"
+                  useRAG: false
+      responses:
+        '200':
+          description: Ответ сгенерирован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RAGResponse'
+        '400':
+          description: Неверный запрос
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Ошибка при генерации ответа
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /api/embeddings:
     get:
@@ -377,6 +429,58 @@ components:
         createdAt:
           type: string
           format: date-time
+
+    RAGRequest:
+      type: object
+      required:
+        - question
+      properties:
+        question:
+          type: string
+          description: Вопрос для генерации ответа
+          example: "Что такое ошибочная программа?"
+        useRAG:
+          type: boolean
+          default: true
+          description: Использовать ли RAG (контекст из базы данных)
+        topK:
+          type: integer
+          default: 3
+          description: Количество документов для контекста (используется только при useRAG=true)
+
+    RAGResponse:
+      type: object
+      properties:
+        question:
+          type: string
+          description: Исходный вопрос
+        answer:
+          type: string
+          description: Сгенерированный ответ
+        usedRAG:
+          type: boolean
+          description: Был ли использован RAG
+        context:
+          type: array
+          nullable: true
+          description: Контекст из базы данных (null если useRAG=false или документы не найдены)
+          items:
+            $ref: '#/components/schemas/RAGContext'
+
+    RAGContext:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: ID документа в базе
+        text:
+          type: string
+          description: Текст документа
+        similarity:
+          type: number
+          format: double
+          description: Косинусное сходство с вопросом (0-1)
 
     ErrorResponse:
       type: object

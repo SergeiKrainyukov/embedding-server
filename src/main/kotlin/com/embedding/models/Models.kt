@@ -70,6 +70,58 @@ data class ErrorResponse(
     val details: String? = null
 )
 
+@Serializable
+data class HealthResponse(
+    val status: String,
+    val ollama: Boolean? = null,
+    val database: Boolean? = null,
+    val error: String? = null
+)
+
+@Serializable
+data class ChunkSettings(
+    val minTokens: Int,
+    val maxTokens: Int,
+    val overlapTokens: Int
+)
+
+@Serializable
+data class StatsResponse(
+    val totalEmbeddings: Long,
+    val chunkSettings: ChunkSettings,
+    val normalization: String
+)
+
+@Serializable
+data class DeleteResponse(
+    val deleted: Boolean,
+    val id: Long
+)
+
+// === RAG (Retrieval-Augmented Generation) ===
+
+@Serializable
+data class RAGRequest(
+    val question: String,
+    val useRAG: Boolean = true,
+    val topK: Int = 3
+)
+
+@Serializable
+data class RAGResponse(
+    val question: String,
+    val answer: String,
+    val usedRAG: Boolean,
+    val context: List<RAGContext>? = null
+)
+
+@Serializable
+data class RAGContext(
+    val id: Long,
+    val text: String,
+    val similarity: Double
+)
+
 // === Ollama API ===
 
 @Serializable
@@ -81,4 +133,32 @@ data class OllamaEmbedRequest(
 @Serializable
 data class OllamaEmbedResponse(
     val embeddings: List<List<Double>>
+)
+
+@Serializable
+data class OllamaChatRequest(
+    val model: String,
+    val messages: List<OllamaMessage>,
+    val stream: Boolean = false
+)
+
+@Serializable
+data class OllamaMessage(
+    val role: String,
+    val content: String
+)
+
+@Serializable
+data class OllamaChatResponse(
+    val model: String? = null,
+    val created_at: String? = null,
+    val message: OllamaMessage,
+    val done: Boolean,
+    val done_reason: String? = null,
+    val total_duration: Long? = null,
+    val load_duration: Long? = null,
+    val prompt_eval_count: Int? = null,
+    val prompt_eval_duration: Long? = null,
+    val eval_count: Int? = null,
+    val eval_duration: Long? = null
 )

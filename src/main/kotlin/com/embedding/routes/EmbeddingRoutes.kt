@@ -91,19 +91,46 @@ fun Route.embeddingRoutes(embeddingService: EmbeddingService) {
         post("/search") {
             try {
                 val request = call.receive<SearchRequest>()
-                
+
                 if (request.query.isBlank()) {
                     call.respond(HttpStatusCode.BadRequest, ErrorResponse("Query cannot be empty"))
                     return@post
                 }
-                
+
                 val response = embeddingService.search(request.query, request.topK)
                 call.respond(HttpStatusCode.OK, response)
-                
+
             } catch (e: Exception) {
                 call.respond(
                     HttpStatusCode.InternalServerError,
                     ErrorResponse("Search failed", e.message)
+                )
+            }
+        }
+
+        /**
+         * POST /api/rag - RAG (Retrieval-Augmented Generation) - отвечает на вопрос
+         */
+        post("/rag") {
+            try {
+                val request = call.receive<RAGRequest>()
+
+                if (request.question.isBlank()) {
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse("Question cannot be empty"))
+                    return@post
+                }
+
+                val response = embeddingService.answerQuestion(
+                    question = request.question,
+                    useRAG = request.useRAG,
+                    topK = request.topK
+                )
+                call.respond(HttpStatusCode.OK, response)
+
+            } catch (e: Exception) {
+                call.respond(
+                    HttpStatusCode.InternalServerError,
+                    ErrorResponse("RAG request failed", e.message)
                 )
             }
         }
@@ -172,8 +199,8 @@ fun Route.embeddingRoutes(embeddingService: EmbeddingService) {
                     call.respond(HttpStatusCode.NotFound, ErrorResponse("Embedding not found"))
                     return@delete
                 }
-                
-                call.respond(HttpStatusCode.OK, mapOf("deleted" to true, "id" to id))
+
+                call.respond(HttpStatusCode.OK, DeleteResponse(deleted = true, id = id))
                 
             } catch (e: Exception) {
                 call.respond(
@@ -191,20 +218,20 @@ fun Route.embeddingRoutes(embeddingService: EmbeddingService) {
         get("/health") {
             try {
                 val ollamaAvailable = embeddingService.checkOllama()
-                
+
                 val status = if (ollamaAvailable) "healthy" else "degraded"
                 val httpStatus = if (ollamaAvailable) HttpStatusCode.OK else HttpStatusCode.ServiceUnavailable
-                
-                call.respond(httpStatus, mapOf(
-                    "status" to status,
-                    "ollama" to ollamaAvailable,
-                    "database" to true
+
+                call.respond(httpStatus, HealthResponse(
+                    status = status,
+                    ollama = ollamaAvailable,
+                    database = true
                 ))
-                
+
             } catch (e: Exception) {
-                call.respond(HttpStatusCode.ServiceUnavailable, mapOf(
-                    "status" to "unhealthy",
-                    "error" to e.message
+                call.respond(HttpStatusCode.ServiceUnavailable, HealthResponse(
+                    status = "unhealthy",
+                    error = e.message
                 ))
             }
         }
