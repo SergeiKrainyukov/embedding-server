@@ -74,19 +74,23 @@ class EmbeddingService(
     /**
      * Поиск похожих текстов по запросу.
      */
-    suspend fun search(query: String, topK: Int = 5): SearchResponse {
+    suspend fun search(query: String, topK: Int = 5, truncateText: Boolean = true): SearchResponse {
         // Получаем эмбеддинг запроса (не сохраняем)
         val queryResponse = embed(query, saveToDb = false)
-        
+
         // Ищем похожие в базе
         val similar = repository.findSimilar(queryResponse.embedding, topK)
-        
+
         return SearchResponse(
             query = query,
             results = similar.map { (stored, similarity) ->
                 SearchResult(
                     id = stored.id,
-                    text = stored.text.take(300) + if (stored.text.length > 300) "..." else "",
+                    text = if (truncateText) {
+                        stored.text.take(300) + if (stored.text.length > 300) "..." else ""
+                    } else {
+                        stored.text
+                    },
                     similarity = similarity
                 )
             }
@@ -134,10 +138,13 @@ class EmbeddingService(
      */
     suspend fun answerQuestion(question: String, useRAG: Boolean = true, topK: Int = 3): RAGResponse {
         return if (useRAG) {
-            // Ищем релевантный контекст в БД
-            val searchResult = search(question, topK)
+            // Получаем эмбеддинг запроса
+            val queryResponse = embed(question, saveToDb = false)
 
-            if (searchResult.results.isEmpty()) {
+            // Ищем похожие документы напрямую через repository
+            val similar = repository.findSimilar(queryResponse.embedding, topK)
+
+            if (similar.isEmpty()) {
                 // Если контекст не найден, отвечаем без RAG
                 val answer = ollamaClient.generateAnswer(question, null)
                 RAGResponse(
@@ -148,8 +155,8 @@ class EmbeddingService(
                 )
             } else {
                 // Формируем контекст из найденных документов
-                val contextText = searchResult.results.joinToString("\n\n") { result ->
-                    "Документ ${result.id} (сходство: ${"%.2f".format(result.similarity)}):\n${result.text}"
+                val contextText = similar.joinToString("\n\n") { (stored, similarity) ->
+                    "Документ ${stored.id} (сходство: ${"%.1f".format(similarity * 100)}%):\n${stored.text}"
                 }
 
                 // Генерируем ответ с контекстом
@@ -159,11 +166,13 @@ class EmbeddingService(
                     question = question,
                     answer = answer,
                     usedRAG = true,
-                    context = searchResult.results.map { result ->
+                    context = similar.map { (stored, similarity) ->
                         RAGContext(
-                            id = result.id,
-                            text = result.text,
-                            similarity = result.similarity
+                            id = stored.id,
+                            text = stored.text,
+                            similarity = similarity,
+                            similarityPercent = "${"%.1f".format(similarity * 100)}%",
+                            createdAt = stored.createdAt
                         )
                     }
                 )

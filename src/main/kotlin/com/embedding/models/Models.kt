@@ -119,7 +119,9 @@ data class RAGResponse(
 data class RAGContext(
     val id: Long,
     val text: String,
-    val similarity: Double
+    val similarity: Double,
+    val similarityPercent: String,
+    val createdAt: String? = null
 )
 
 // === Ollama API ===
@@ -161,4 +163,60 @@ data class OllamaChatResponse(
     val prompt_eval_duration: Long? = null,
     val eval_count: Int? = null,
     val eval_duration: Long? = null
+)
+
+// === Document Management ===
+
+@Serializable
+data class DocumentUploadRequest(
+    val fileName: String,
+    val content: String
+)
+
+@Serializable
+data class DocumentUploadResponse(
+    val documentId: Long,
+    val fileName: String,
+    val fileSize: Long,
+    val chunksCreated: Int,
+    val createdAt: String
+)
+
+@Serializable
+data class DocumentInfo(
+    val id: Long,
+    val fileName: String,
+    val fileSize: Long,
+    val chunksCount: Int,
+    val createdAt: String
+)
+
+@Serializable
+data class DocumentChunkInfo(
+    val id: Long,
+    val documentId: Long,
+    val documentName: String,
+    val chunkIndex: Int,
+    val text: String,
+    val startPosition: Int,
+    val endPosition: Int,
+    val tokenCount: Int
+)
+
+@Serializable
+data class DocumentRAGResponse(
+    val question: String,
+    val answer: String,
+    val sources: List<DocumentSource>
+)
+
+@Serializable
+data class DocumentSource(
+    val documentId: Long,
+    val documentName: String,
+    val chunkIndex: Int,
+    val text: String,
+    val similarity: Double,
+    val similarityPercent: String,
+    val link: String  // Ссылка для навигации к документу и чанку
 )

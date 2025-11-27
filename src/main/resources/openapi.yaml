@@ -3,12 +3,19 @@ info:
   title: Embedding Server API
   description: |
     Сервер для создания эмбеддингов текста с использованием Ollama (nomic-embed-text).
-    
-    ## Особенности:
-    - **Chunking**: Тексты разбиваются на чанки по 500-1000 токенов
-    - **Overlapping**: Перекрытие между чанками 50-100 токенов
+
+    ## Основные возможности:
+    - **Работа с текстовыми эмбеддингами**: Создание векторных представлений текста
+    - **Загрузка MD-документов**: Автоматическая обработка и векторизация Markdown файлов
+    - **Семантический поиск**: Поиск релевантных фрагментов по векторному сходству
+    - **RAG с источниками**: Генерация ответов с кликабельными ссылками на источники
+
+    ## Технические особенности:
+    - **Chunking**: Тексты разбиваются на чанки по 100-256 токенов
+    - **Overlapping**: Перекрытие между чанками 25 токенов для сохранения контекста
     - **Normalization**: Все вектора нормализуются к диапазону [-1, 1]
-    - **Storage**: Эмбеддинги сохраняются в базу данных
+    - **Storage**: Эмбеддинги и документы сохраняются в H2 базу данных
+    - **Models**: nomic-embed-text (embeddings), qwen2.5:1.5b (генерация ответов)
   version: 1.0.0
   contact:
     name: Embedding Server
@@ -20,6 +27,8 @@ servers:
 tags:
   - name: Embeddings
     description: Создание эмбеддингов
+  - name: Documents
+    description: Работа с MD-документами
   - name: Search
     description: Семантический поиск
   - name: RAG
@@ -117,6 +126,200 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EmbedResponse'
+
+  /api/documents/upload:
+    post:
+      tags:
+        - Documents
+      summary: Загрузить MD-документ
+      description: |
+        Загружает документ в формате Markdown, разбивает его на чанки, векторизует и сохраняет в БД.
+        Каждый чанк получает свой embedding и может быть найден через семантический поиск.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentUploadRequest'
+            example:
+              fileName: "example.md"
+              content: "# Заголовок\n\nСодержимое документа..."
+      responses:
+        '201':
+          description: Документ успешно загружен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentUploadResponse'
+        '400':
+          description: Неверный запрос (например, не MD-файл)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/documents:
+    get:
+      tags:
+        - Documents
+      summary: Получить список всех документов
+      responses:
+        '200':
+          description: Список документов
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DocumentInfo'
+
+  /api/documents/{id}:
+    get:
+      tags:
+        - Documents
+      summary: Получить информацию о документе
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Информация о документе
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentInfo'
+        '404':
+          description: Документ не найден
+
+    delete:
+      tags:
+        - Documents
+      summary: Удалить документ
+      description: Удаляет документ и все его чанки
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Документ удалён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteResponse'
+        '404':
+          description: Документ не найден
+
+  /api/documents/{id}/chunks:
+    get:
+      tags:
+        - Documents
+      summary: Получить все чанки документа
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Список чанков
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DocumentChunkInfo'
+
+  /api/documents/{id}/chunks/{chunkIndex}:
+    get:
+      tags:
+        - Documents
+      summary: Получить конкретный чанк документа
+      description: Используется для перехода по ссылкам из RAG-ответов
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: chunkIndex
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Информация о чанке
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentChunkInfo'
+        '404':
+          description: Чанк не найден
+
+  /api/documents/ask:
+    post:
+      tags:
+        - Documents
+      summary: Задать вопрос с RAG (с источниками)
+      description: |
+        Выполняет RAG-поиск по документам и возвращает ответ с кликабельными ссылками на источники.
+
+        Процесс:
+        1. Вопрос векторизуется
+        2. Ищутся наиболее похожие чанки документов
+        3. Чанки используются как контекст для генерации ответа
+        4. Возвращается ответ со ссылками на источники
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RAGRequest'
+            example:
+              question: "Какие возможности есть у сервера?"
+              topK: 3
+      responses:
+        '200':
+          description: Ответ с источниками
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentRAGResponse'
+        '400':
+          description: Неверный запрос
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/documents/stats:
+    get:
+      tags:
+        - Documents
+      summary: Статистика по документам
+      responses:
+        '200':
+          description: Статистика
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  totalDocuments:
+                    type: integer
+                  totalChunks:
+                    type: integer
 
   /api/search:
     post:
@@ -490,3 +693,124 @@ components:
         details:
           type: string
           nullable: true
+
+    DeleteResponse:
+      type: object
+      properties:
+        deleted:
+          type: boolean
+        id:
+          type: integer
+          format: int64
+
+    DocumentUploadRequest:
+      type: object
+      required:
+        - fileName
+        - content
+      properties:
+        fileName:
+          type: string
+          description: Имя файла (должно заканчиваться на .md)
+          example: "example.md"
+        content:
+          type: string
+          description: Содержимое MD-файла
+
+    DocumentUploadResponse:
+      type: object
+      properties:
+        documentId:
+          type: integer
+          format: int64
+        fileName:
+          type: string
+        fileSize:
+          type: integer
+          format: int64
+        chunksCreated:
+          type: integer
+          description: Количество созданных чанков
+        createdAt:
+          type: string
+          format: date-time
+
+    DocumentInfo:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        fileName:
+          type: string
+        fileSize:
+          type: integer
+          format: int64
+        chunksCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    DocumentChunkInfo:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        documentId:
+          type: integer
+          format: int64
+        documentName:
+          type: string
+        chunkIndex:
+          type: integer
+        text:
+          type: string
+          description: Полный текст чанка
+        startPosition:
+          type: integer
+        endPosition:
+          type: integer
+        tokenCount:
+          type: integer
+
+    DocumentRAGResponse:
+      type: object
+      properties:
+        question:
+          type: string
+        answer:
+          type: string
+          description: Сгенерированный ответ LLM
+        sources:
+          type: array
+          description: Источники с кликабельными ссылками
+          items:
+            $ref: '#/components/schemas/DocumentSource'
+
+    DocumentSource:
+      type: object
+      properties:
+        documentId:
+          type: integer
+          format: int64
+        documentName:
+          type: string
+        chunkIndex:
+          type: integer
+        text:
+          type: string
+          description: Фрагмент текста (обрезанный до 300 символов)
+        similarity:
+          type: number
+          format: double
+          description: Косинусное сходство (0-1)
+        similarityPercent:
+          type: string
+          example: "85.5%"
+        link:
+          type: string
+          format: uri
+          description: Кликабельная ссылка на чанк
+          example: "http://localhost:8080/api/documents/1/chunks/0"

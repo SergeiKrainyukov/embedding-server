@@ -2,7 +2,9 @@ package com.embedding
 
 import com.embedding.database.DatabaseManager
 import com.embedding.routes.embeddingRoutes
+import com.embedding.routes.documentRoutes
 import com.embedding.services.EmbeddingService
+import com.embedding.services.DocumentService
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
@@ -24,9 +26,10 @@ fun main() {
 fun Application.module() {
     // Инициализация БД
     DatabaseManager.init()
-    
-    // Сервис эмбеддингов
+
+    // Сервисы
     val embeddingService = EmbeddingService()
+    val documentService = DocumentService()
     
     // Настройка сериализации JSON
     install(ContentNegotiation) {
@@ -69,8 +72,10 @@ fun Application.module() {
             call.respondText(
                 """
                 🚀 Embedding Server v1.0.0
-                
+
                 API Endpoints:
+
+                Embeddings:
                 - POST /api/embed         - Create embedding for text
                 - POST /api/embed/batch   - Create embeddings for multiple texts
                 - POST /api/embed/query   - Create embedding without saving
@@ -78,14 +83,26 @@ fun Application.module() {
                 - GET  /api/embeddings    - List all stored embeddings
                 - GET  /api/embeddings/{id} - Get embedding by ID
                 - DELETE /api/embeddings/{id} - Delete embedding
+
+                Documents (MD):
+                - POST /api/documents/upload - Upload MD document
+                - GET  /api/documents        - List all documents
+                - GET  /api/documents/{id}   - Get document info
+                - GET  /api/documents/{id}/chunks - Get document chunks
+                - GET  /api/documents/{id}/chunks/{index} - Get specific chunk
+                - DELETE /api/documents/{id} - Delete document
+                - POST /api/documents/ask    - Ask question with RAG (returns sources)
+                - GET  /api/documents/stats  - Documents statistics
+
+                System:
                 - GET  /api/health        - Health check
                 - GET  /api/stats         - Service statistics
-                
+
                 Swagger UI: http://localhost:8080/swagger
-                
+
                 Configuration:
-                - Chunk size: 500-1000 tokens
-                - Overlap: 50-100 tokens
+                - Chunk size: 100-256 tokens
+                - Overlap: 25 tokens
                 - Normalization: L2 to [-1, 1]
                 - Model: nomic-embed-text (Ollama)
                 """.trimIndent(),
@@ -95,6 +112,7 @@ fun Application.module() {
         
         // API роуты
         embeddingRoutes(embeddingService)
+        documentRoutes(documentService)
     }
     
     println("""
