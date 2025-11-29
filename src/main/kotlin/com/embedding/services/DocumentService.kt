@@ -147,10 +147,10 @@ class DocumentService(
     /**
      * Статистика по документам.
      */
-    fun getStats(): Map<String, Any> {
-        return mapOf(
-            "totalDocuments" to repository.countDocuments(),
-            "totalChunks" to repository.countChunks()
+    fun getStats(): DocumentStatsResponse {
+        return DocumentStatsResponse(
+            totalDocuments = repository.countDocuments(),
+            totalChunks = repository.countChunks()
         )
     }
 }

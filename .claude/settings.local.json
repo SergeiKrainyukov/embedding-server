@@ -10,7 +10,8 @@
       "Bash(open:*)",
       "Bash(mkdir:*)",
       "Bash(lsof:*)",
-      "Bash(xargs kill:*)"
+      "Bash(xargs kill:*)",
+      "Bash(pgrep:*)"
     ],
     "deny": [],
     "ask": []

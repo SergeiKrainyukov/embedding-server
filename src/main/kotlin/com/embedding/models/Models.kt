@@ -220,3 +220,9 @@ data class DocumentSource(
     val similarityPercent: String,
     val link: String  // Ссылка для навигации к документу и чанку
 )
+
+@Serializable
+data class DocumentStatsResponse(
+    val totalDocuments: Long,
+    val totalChunks: Long
+)
